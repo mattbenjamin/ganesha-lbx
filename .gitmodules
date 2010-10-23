@@ -1,0 +1,3 @@
+[submodule "src/tirpc"]
+	path = src/tirpc
+	url = git://github.com/mattbenjamin/libtirpc-lbx.git
