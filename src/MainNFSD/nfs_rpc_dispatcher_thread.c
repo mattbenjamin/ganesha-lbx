@@ -83,7 +83,7 @@
 #include "nfs_stat.h"
 #include "SemN.h"
 
-#ifdef _APPLE
+#if defined(_APPLE) || defined(_CYGWIN)
 #define __FDS_BITS(set) ((set)->fds_bits)
 #endif
 

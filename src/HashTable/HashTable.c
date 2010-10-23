@@ -389,8 +389,6 @@ hash_table_t *HashTable_Init(hash_parameter_t hparam)
   if (hparam.name != NULL)
     name = hparam.name;
 
-  pthread_mutexattr_t mutexattr;
-
   /* Sanity check */
   if((ht = (hash_table_t *) Mem_Alloc_Label(sizeof(hash_table_t),
                                             "hash_table_t")) == NULL)
@@ -398,9 +396,6 @@ hash_table_t *HashTable_Init(hash_parameter_t hparam)
 
   /* we have to keep the discriminant values */
   ht->parameter = hparam;
-
-  if(pthread_mutexattr_init(&mutexattr) != 0)
-    return NULL;
 
   /* Initialization of the node array */
   if((ht->array_rbt =

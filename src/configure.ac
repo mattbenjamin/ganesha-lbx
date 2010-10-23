@@ -72,8 +72,7 @@ case $build in
 		;;
 	*-freebsd*)
 		MYOS=FREEBSD
-		AC_DEFINE( [APPLE], 1, [Build Operating System is FreeBSD] )
-                AC_DEFINE( [_APPLE], 1, [Build Operating System is FreeBSD] )
+		# XXX were we relying on defining Apple to get __FDS_BITS macro?
                 AC_DEFINE( [FREEBSD], 1, [Build Operating System is FreeBSD] )
                 AC_DEFINE( [_FREEBSD], 1, [Build Operating System is FreeBSD] )
 		EXTRA_LIB=""
@@ -87,6 +86,12 @@ case $build in
 		AC_DEFINE([_LARGEFILE64_SOURCE], 1, [Large file support])
 		AC_DEFINE([__EXTENSIONS__], 1, [Define missing types and 64bits functions on Solaris])
 		EXTRA_LIB="-lnsl -lsocket"
+		;;
+	*-cygwin*)
+		MYOS=CYGWIN
+                AC_DEFINE( [CYGWIN], 1, [Build Operating System is Cygwin] )
+                AC_DEFINE( [_CYGWIN], 1, [Build Operating System is Cygwin] )
+		EXTRA_LIB=""
 		;;
 	*)
 		AC_MSG_ERROR([The plateform $build is not supported])
@@ -508,6 +513,14 @@ case $FSAL in
                 ;;
 	POSIX)
 
+		case "$MYOS" in
+
+		"CYGWIN")
+			CFLAGS="$CFLAGS -I/usr/include/tirpc"
+			LDFLAGS="$LDFLAGS -ltirpc"
+			;;
+		esac
+
 		case "$DBTYPE" in
 
 		"PGSQL") 
@@ -533,6 +546,9 @@ case $FSAL in
 					;;
 				"SOLARIS") 
 					DBEXT_LDADD="-L$DBEXT_LIB_PATH -lpq"
+					;;
+				"CYGWIN")
+					DBEXT_LDADD="-L$DBEXT_LIB_PATH -lpq -lssl -lcrypto -lz"
 					;;
 			esac 
 

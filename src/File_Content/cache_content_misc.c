@@ -39,11 +39,13 @@
 #include "config.h"
 #endif
 
-#ifdef _SOLARIS
+#if defined(_SOLARIS)
 #include "solaris_port.h"
 #define NAME_MAX         255
+#endif /* _SOLARIS */
+#if defined(_SOLARIS) || defined(_CYGWIN)
 #include <sys/statvfs.h>        /* For statfs */
-#endif                          /* _SOLARIS */
+#endif 
 
 #include "fsal.h"
 #include "LRU_List.h"
@@ -568,7 +570,7 @@ cache_content_status_t cache_content_check_threshold(char *datacache_path,
                                                      unsigned long *p_blocks_to_lwm)
 {
   char fspath[MAXPATHLEN];
-#ifdef _SOLARIS
+#if defined(_SOLARIS) || defined(_CYGWIN)
   struct statvfs info_fs;
 #else
   struct statfs info_fs;

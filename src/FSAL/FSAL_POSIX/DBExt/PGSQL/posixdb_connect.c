@@ -178,7 +178,7 @@ fsal_posixdb_status_t fsal_posixdb_initPreparedQueries(fsal_posixdb_conn * p_con
   p_res = PQprepare(p_conn,
                     "insertHandle",
                     "INSERT INTO Handle(deviceid, inode, handleTs, nlink, ctime, ftype) \
-                      VALUES ($1::int, $2::bigint, $3::bigint, $4::smallint, $5::int, $6::int)", 6, NULL);
+                      VALUES ($1::bigint, $2::bigint, $3::bigint, $4::smallint, $5::int, $6::int)", 6, NULL);
   CheckCommand(p_res);
   PQclear(p_res);
 

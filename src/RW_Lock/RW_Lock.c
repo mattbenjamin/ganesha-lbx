@@ -207,21 +207,14 @@ int rw_lock_downgrade(rw_lock_t * plock)
 int rw_lock_init(rw_lock_t * plock)
 {
   int rc = 0;
-  pthread_mutexattr_t mutex_attr;
-  pthread_condattr_t cond_attr;
 
-  if((rc = pthread_mutexattr_init(&mutex_attr) != 0))
-    return 1;
-  if((rc = pthread_condattr_init(&cond_attr) != 0))
-    return 1;
+  if((rc = pthread_mutex_init(&(plock->mutexProtect), NULL)) != 0)
+      goto out;
 
-  if((rc = pthread_mutex_init(&(plock->mutexProtect), &mutex_attr)) != 0)
-    return 1;
-
-  if((rc = pthread_cond_init(&(plock->condRead), &cond_attr)) != 0)
-    return 1;
-  if((rc = pthread_cond_init(&(plock->condWrite), &cond_attr)) != 0)
-    return 1;
+  if((rc = pthread_cond_init(&(plock->condRead), NULL)) != 0)
+      goto out;
+  if((rc = pthread_cond_init(&(plock->condWrite), NULL)) != 0)
+      goto out;
 
   plock->nbr_waiting = 0;
   plock->nbr_active = 0;
@@ -229,7 +222,8 @@ int rw_lock_init(rw_lock_t * plock)
   plock->nbw_waiting = 0;
   plock->nbw_active = 0;
 
-  return 0;
+out:
+  return rc;
 }                               /* rw_lock_init */
 
 /*

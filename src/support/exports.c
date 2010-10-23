@@ -82,6 +82,9 @@
 #include <arpa/inet.h>
 #include <string.h>
 #include <ctype.h>
+#if defined(_CYGWIN)
+/* Cygwin does not implement getnetbyname. */
+#endif
 
 extern nfs_parameter_t nfs_param;
 
@@ -358,13 +361,12 @@ int nfs_LookupNetworkAddr(char *host,   /* [IN] host/address specifier */
           memcpy(&net_addr, host_ent->h_addr, host_ent->h_length);
           compute_mask = FALSE;
         }
+#if !defined(_CYGWIN) /* XXX see above */
       else
         {
-
           /*
            * Not a valid hostname. Check for a network name. 
            */
-
           net_ent = getnetbyname(host);
           if(net_ent == NULL)
             {
@@ -379,6 +381,7 @@ int nfs_LookupNetworkAddr(char *host,   /* [IN] host/address specifier */
               endnetent();
             }
         }
+#endif /* !_CYGWIN */
     }
   /*
    * If no error and address is a network address, convert address to
@@ -575,9 +578,9 @@ int nfs_AddClientsToClientArray(exportlist_client_t *clients,
  * @todo BUGAZOMEU : handling wildcards.
  *
  */
-static int nfs_AddClientsToExportList(exportlist_t * ExportEntry,
-                                      int new_clients_number,
-                                      char **new_clients_name, int option)
+int nfs_AddClientsToExportList(exportlist_t * ExportEntry,
+                               int new_clients_number,
+                               char **new_clients_name, int option)
 {
   int i = 0;
   int j = 0;
@@ -693,7 +696,7 @@ static int parseAccessParam(char *var_name, char *var_value,
  * Don't stop immediately on error,
  * continue parsing the file, for listing other errors.
  */
-static int BuildExportEntry(config_item_t block, exportlist_t ** pp_export)
+int BuildExportEntry(config_item_t block, exportlist_t ** pp_export)
 {
   exportlist_t *p_entry;
   int i, rc;
@@ -1988,7 +1991,7 @@ int export_client_match(unsigned int addr,
               return TRUE;
             }
           break;
-
+#if !defined(_CYGWIN)
         case NETGROUP_CLIENT:
           /* Try to get the entry from th IP/name cache */
           if((rc = nfs_ip_name_get(addr, hostname)) != IP_NAME_SUCCESS)
@@ -2013,6 +2016,7 @@ int export_client_match(unsigned int addr,
               return TRUE;
             }
           break;
+#endif /* _CYGWIN */
 
         case WILDCARDHOST_CLIENT:
           /* Try to get the entry from th IP/name cache */

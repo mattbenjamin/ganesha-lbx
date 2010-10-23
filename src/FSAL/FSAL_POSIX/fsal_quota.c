@@ -36,7 +36,10 @@
 #include "fsal_convert.h"
 
 /* For quotactl */
+#ifdef _USE_QUOTA
 #include <sys/quota.h>
+#include <stdint.h>
+#endif /* _USE_QUOTA */
 #include <sys/types.h>
 #include <string.h>
 
@@ -62,7 +65,9 @@ fsal_status_t POSIXFSAL_get_quota(fsal_path_t * pfsal_path,     /* IN */
                                   fsal_uid_t fsal_uid,  /* IN */
                                   fsal_quota_t * pquota)        /* OUT */
 {
+#ifdef _USE_QUOTA
   struct dqblk fs_quota;
+#endif
   char fs_spec[MAXPATHLEN];
 
   if(!pfsal_path || !pquota)
@@ -71,8 +76,8 @@ fsal_status_t POSIXFSAL_get_quota(fsal_path_t * pfsal_path,     /* IN */
   if(fsal_internal_path2fsname(pfsal_path->path, fs_spec) == -1)
     ReturnCode(ERR_FSAL_INVAL, 0);
 
+#ifdef _USE_QUOTA
   memset((char *)&fs_quota, 0, sizeof(struct dqblk));
-
   if(quotactl(FSAL_QCMD(Q_GETQUOTA, quota_type), fs_spec, fsal_uid, (caddr_t) & fs_quota)
      < 0)
     ReturnCode(posix2fsal_error(errno), errno);
@@ -86,6 +91,16 @@ fsal_status_t POSIXFSAL_get_quota(fsal_path_t * pfsal_path,     /* IN */
   pquota->btimeleft = fs_quota.dqb_btime;
   pquota->ftimeleft = fs_quota.dqb_itime;
   pquota->bsize = DEV_BSIZE;
+#else
+  pquota->bhardlimit = INT_MAX;
+  pquota->bsoftlimit = INT_MAX;
+  pquota->curblocks = 1;
+  pquota->fhardlimit = INT_MAX;
+  pquota->curfiles = 1;
+  pquota->btimeleft = 999999;
+  pquota->ftimeleft = 999999;
+  pquota->bsize = DEV_BSIZE;
+#endif /* _USE_QUOTA */
 
   ReturnCode(ERR_FSAL_NO_ERROR, 0);
 }                               /*  FSAL_get_quota */
@@ -116,13 +131,16 @@ fsal_status_t POSIXFSAL_set_quota(fsal_path_t * pfsal_path,     /* IN */
                                   fsal_quota_t * pquota,        /* IN */
                                   fsal_quota_t * presquota)     /* OUT */
 {
+#ifdef _USE_QUOTA
   struct dqblk fs_quota;
+#endif
   fsal_status_t fsal_status;
   char fs_spec[MAXPATHLEN];
 
   if(!pfsal_path || !pquota)
     ReturnCode(ERR_FSAL_FAULT, 0);
 
+#ifdef _USE_QUOTA
   if(fsal_internal_path2fsname(pfsal_path->path, fs_spec) == -1)
     ReturnCode(ERR_FSAL_INVAL, 0);
 
@@ -170,6 +188,7 @@ fsal_status_t POSIXFSAL_set_quota(fsal_path_t * pfsal_path,     /* IN */
       if(FSAL_IS_ERROR(fsal_status))
         return fsal_status;
     }
+#endif /* _USE_QUOTA */
 
   ReturnCode(ERR_FSAL_NO_ERROR, 0);
 }                               /*  FSAL_set_quota */

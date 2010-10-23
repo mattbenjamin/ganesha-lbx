@@ -57,7 +57,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netconfig.h>
-#ifdef _SOLARIS
+#if defined(_SOLARIS) /* XXX AC */
 #include <netdir.h>
 #endif
 #include <err.h>

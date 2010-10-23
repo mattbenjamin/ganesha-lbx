@@ -84,6 +84,22 @@ static void init_keys(void)
   return;
 }                               /* init_keys */
 
+#if defined(CYGWIN)
+static struct mntent *
+getmntent_r(FILE *fp, struct mntent *mnt, char *work, int32_t len)
+{
+    struct mntent *tmp;
+    static pthread_mutex_t mtx = PTHREAD_MUTEX_INITIALIZER;
+
+    pthread_mutex_lock(&mtx);
+    tmp = getmntent(fp);
+    memcpy(mnt, tmp, sizeof(struct mntent));
+    pthread_mutex_unlock(&mtx);
+
+    return (mnt);
+}
+#endif
+
 /**
  * fsal_increment_nbcall:
  * Updates fonction call statistics.

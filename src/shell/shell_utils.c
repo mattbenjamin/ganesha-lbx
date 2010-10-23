@@ -69,16 +69,10 @@
 
 #include "stuff_alloc.h"
 
-/* For mallinfo */
-#ifdef _LINUX
-#include <malloc.h>
-#endif
-
+/* For mallinfo. */
 #if( defined(  _APPLE ) && !defined( _FREEBSD )  )
 #include <malloc/malloc.h>
-#endif
-
-#ifdef _SOLARIS
+#else
 #include <malloc.h>
 #endif
 

@@ -41,8 +41,10 @@
 
 #ifdef _SOLARIS
 #include "solaris_port.h"
+#endif /* _SOLARIS */
+#if defined(_SOLARIS) || defined(_CYGWIN)
 #include <sys/statvfs.h>
-#endif                          /* _SOLARIS */
+#endif /* _SOLARIS || _CYGWIN */
 
 #include "LRU_List.h"
 #include "log_macros.h"
@@ -132,7 +134,7 @@ cache_content_status_t cache_content_emergency_flush(char *cachedir,
 #endif
   cache_content_flush_behaviour_t local_flushhow = flushhow;
   unsigned int passcounter = 0;
-#ifdef _SOLARIS
+#if defined(_SOLARIS) || defined(_CYGWIN)
   struct statvfs info_fs;
 #else
   struct statfs info_fs;
