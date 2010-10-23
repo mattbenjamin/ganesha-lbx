@@ -70,6 +70,7 @@
 #include <Rpc_com_tirpc.h>
 #include "stuff_alloc.h"
 #include "RW_Lock.h"
+#include "nfs_core.h"
 #include <pthread.h>
 
 int getpeereid(int s, uid_t * euid, gid_t * egid);
@@ -442,7 +443,7 @@ struct rpc_msg *msg;
   etat_xprt[newxprt->xp_fd] = 0;
 
   if((rc =
-      fridge_get(&sockmgr_thrid, rpc_tcp_socket_manager_thread,
+      fridgethr_get(&sockmgr_thrid, rpc_tcp_socket_manager_thread,
                      (void *)(newxprt->xp_fd))) != 0)
     return FALSE;
 
