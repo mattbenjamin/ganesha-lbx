@@ -1696,7 +1696,7 @@ log_component_info __attribute__ ((__unused__)) LogComponents[COMPONENT_COUNT] =
     SYSLOG,
     "SYSLOG"
   },
-  { COMPONENT_RPC_CACHE,         "COMPONENT_RPC_CACHE", "RPC CACHE",
+  { COMPONENT_RPC,               "COMPONENT_RPC", "RPC",
     NIV_EVENT,
     SYSLOG,
     "SYSLOG"
@@ -1873,6 +1873,53 @@ void SetComponentLogBuffer(log_components_t component, char *buffer)
   LogComponents[component].comp_log_type = BUFFLOG;
   LogComponents[component].comp_buffer   = buffer;
 }
+
+static int global_rpc_loglevel = NIV_MAJOR; /* XXX */
+
+/*
+ *  Re-export component logging to TI-RPC internal logging
+ */
+void
+rpc_warnx(/* const */ char *fmt, ...)
+{
+    va_list ap;
+    log_components_t comp = COMPONENT_RPC;
+    int rc, level;
+
+    level = LogComponents[comp].comp_log_level;
+    if (level < global_rpc_loglevel)
+	goto out;
+
+    va_start(ap, fmt);
+    
+    switch(LogComponents[comp].comp_log_type) {
+    case SYSLOG:
+      rc = DisplayLogSyslog_valist(comp, level, fmt, ap);
+      break;
+    case FILELOG:
+      rc = DisplayLogPath_valist(LogComponents[comp].comp_log_file, comp, fmt, ap);
+      break;
+    case STDERRLOG:
+      rc = DisplayLogFlux_valist(stderr, comp, fmt, ap);
+      break;
+    case STDOUTLOG:
+      rc = DisplayLogFlux_valist(stdout, comp, fmt, ap);
+      break;
+    case TESTLOG:
+      rc = DisplayTest_valist(comp, fmt, ap);
+      break;
+    case BUFFLOG:
+      rc = DisplayBuffer_valist(LogComponents[comp].comp_buffer, comp, fmt, ap);
+    default:
+      rc = ERR_FAILURE;
+    } /* switch */
+
+    va_end(ap);
+
+out:
+    return;
+
+} /* rpc_warnx */
 
 /*
  * Pour info : Les tags de printf dont on peut se servir:

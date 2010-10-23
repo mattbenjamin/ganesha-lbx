@@ -1,7 +1,11 @@
 ACLOCAL_AMFLAGS = -I m4
 
-SUBDIRS = include             \
-          Log 		      \
+SUBDIRS = include
+if USE_TIRPC
+SUBDIRS += tirpc/src
+endif
+
+SUBDIRS += Log 		      \
           BuddyMalloc         \
           Common              \
           ConfigParsing       \

@@ -1589,6 +1589,14 @@ BUDDY_ADDR_T BuddyMalloc(size_t Size)
   return __BuddyMalloc(Size, FALSE);
 }
 
+BUDDY_ADDR_T BuddyMallocZ(size_t Size)
+{
+  BUDDY_ADDR_T ptr = __BuddyMalloc(Size, FALSE);
+  if (ptr)
+      memset(ptr, 0, Size);
+  return (ptr);
+}
+
 BUDDY_ADDR_T BuddyMallocExit(size_t Size)
 {
   return __BuddyMalloc(Size, TRUE);

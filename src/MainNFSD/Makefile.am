@@ -9,7 +9,7 @@ AM_CFLAGS                     = -Wimplicit $(DLOPEN_FLAGS)  $(FSAL_CFLAGS) $(SEC
 
 SVC_FILES_ONCRPC = Svc_oncrpc.c Svc_tcp_oncrpc.c Svc_udp_oncrpc.c 
 SVC_FILES_GSSRPC = Svc_gssrpc.c Svc_tcp_gssrpc.c Svc_udp_gssrpc.c Svc_auth.c Svc_auth_gss.c Svc_auth_none.c Svc_auth_unix.c AuthGss_HashTable.c 
-SVC_FILES_TIRPC = Svc_tirpc.c Svc_vc_tirpc.c Svc_dg_tirpc.c 
+SVC_FILES_TIRPC = Svc_vc_tirpc.c Svc_dg_tirpc.c 
 
 if USE_GSSRPC
 SVC_FILES = $(SVC_FILES_GSSRPC)
@@ -20,8 +20,8 @@ else
 if USE_TIRPC
 SVC_FILES = $(SVC_FILES_TIRPC)
 SEC_LIB_FLAGS = 
-SVC_FLAGS = -I/usr/include/tirpc
-SVC_LIB_FLAGS = -ltirpc
+#SVC_FLAGS = -I/usr/include/tirpc
+#SVC_LIB_FLAGS = -ltirpc
 else
 SVC_FILES = $(SVC_FILES_ONCRPC) 
 SEC_LIB_FLAGS = 
@@ -113,7 +113,6 @@ libMainServices_la_SOURCES = nfs_admin_thread.c                   \
                              ../include/external_tools.h          \
                              $(SVC_FILES) $(STAT_SNMP_FILES)			  
 
-
 libMainServices_la_LIBADD         =   ../NFS_Protocols/libnfsproto.la                   \
                                       $(PNFS_LIB)                                       \
                                       $(SEC_LIB_FLAGS)                                  \
@@ -135,6 +134,7 @@ libMainServices_la_LIBADD         =   ../NFS_Protocols/libnfsproto.la           
                                       ../Log/liblog.la                                  \
                                       ../ConfigParsing/libConfigParsing.la              \
                                       ../XDR/libnfs_mnt_xdr.la                          \
+                                      ../tirpc/src/libtirpc.la                       \
                                       ../SemN/libSemN.la                                \
                                       ../RW_Lock/librwlock.la                           \
                                       ../Common/libcommon_utils.la
@@ -165,6 +165,8 @@ __FS_NAME__ganesha_nfsd_LDADD      =  ./libMainServices.la \
 
 endif
 
+# XXXX make this conditional on --with-static-libtirpc
+__FS_NAME__ganesha_nfsd_LDFLAGS        = -static-libtool-libs
 
 new: clean all
 

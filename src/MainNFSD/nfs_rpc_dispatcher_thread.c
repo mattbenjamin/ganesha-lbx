@@ -53,6 +53,8 @@
 
 #if defined( _USE_TIRPC )
 #include <rpc/rpc.h>
+#include <rpc/rpc_com.h>
+#include <rpc/svc.h>
 #elif defined( _USE_GSSRPC )
 #include <gssapi/gssapi.h>
 #include <gssrpc/rpc.h>
@@ -90,10 +92,12 @@
 extern nfs_start_info_t nfs_start_info;
 
 #ifdef _USE_TIRPC
+
+SVCXPRT **Xports; /* XXX interim */
+
 struct netconfig *getnetconfigent(const char *netid);
 void freenetconfigent(struct netconfig *);
-SVCXPRT *Svc_vc_create(int, u_int, u_int);
-SVCXPRT *Svc_dg_create(int, u_int, u_int);
+bool_t Svc_dg_recv(SVCXPRT *, struct rpc_msg *);
 #else
 SVCXPRT *Svctcp_create(register int sock, u_int sendsize, u_int recvsize);
 SVCXPRT *Svcudp_bufcreate(register int sock, u_int sendsz, u_int recvsz);
@@ -112,12 +116,6 @@ extern nfs_parameter_t nfs_param;
 struct svc_rpc_gss_data **TabGssData;
 #endif
 extern hash_table_t *ht_dupreq; /* duplicate request hash */
-
-#if _USE_TIRPC
-/* public data : */
-rw_lock_t Svc_lock;
-rw_lock_t Svc_fd_lock;
-#endif
 
 /* These two variables keep state of the thread that gc at this time */
 unsigned int nb_current_gc_workers;
@@ -181,6 +179,10 @@ void nfs_rpc_dispatch_dummy(struct svc_req *ptr_req, SVCXPRT * ptr_svc)
   return;
 }                               /* nfs_rpc_dispatch_dummy */
 
+#ifdef _USE_TIRPC
+extern bool_t Rendezvous_request(SVCXPRT *, struct rpc_msg *);
+#endif
+
 /**
  * nfs_Init_svc: Init the svc descriptors for the nfs daemon. 
  *
@@ -191,6 +193,7 @@ void nfs_rpc_dispatch_dummy(struct svc_req *ptr_req, SVCXPRT * ptr_svc)
 int nfs_Init_svc()
 {
 #ifdef _USE_TIRPC
+  SVCXPRT *p_xprt;
   struct netconfig *netconfig_udpv4;
   struct netconfig *netconfig_tcpv4;
 #ifdef _USE_TIRPC_IPV6
@@ -236,15 +239,25 @@ int nfs_Init_svc()
   int num_sock = nfs_param.core_param.nb_max_fd;
 
   /* Allocate resources that are based on the maximum number of open file descriptors */
-  Xports = (SVCXPRT **) Mem_Alloc_Label(num_sock * sizeof(SVCXPRT *), "Xports array");
+   Xports = (SVCXPRT **) Mem_Alloc_Label(num_sock * sizeof(SVCXPRT *), "Xports array");
   mutex_cond_xprt = (pthread_mutex_t *) Mem_Alloc_Label(num_sock * sizeof(pthread_mutex_t ), "mutex_cond_xprt array");
   condvar_xprt = (pthread_cond_t *) Mem_Alloc_Label(num_sock * sizeof(pthread_cond_t ), "condvar_xprt array");
   etat_xprt = (int *) Mem_Alloc_Label(num_sock * sizeof(int), "etat_xprt array");
-  FD_ZERO(&Svc_fdset);
 
 #ifdef _USE_TIRPC
   LogEvent(COMPONENT_DISPATCH, "NFS INIT: Using TIRPC");
+  svc_init(SVC_INIT_DEFAULT);
+  if (!rpc_control(RPC_SVC_XPRTS_SET, &Xports)) {
+      LogCrit(COMPONENT_DISPATCH,
+	      "NFS EXIT: Cannot initialize TI-RPC SVC (Xports)");
+      return -1;
+  }
+#else
+   Xports = (SVCXPRT **) Mem_Alloc_Label(num_sock * sizeof(SVCXPRT *), "Xports array");
+   FD_ZERO(&Svc_fdset);
+#endif
 
+#ifdef _USE_TIRPC
   /* Get the netconfig entries from /etc/netconfig */
   if((netconfig_udpv4 = (struct netconfig *)getnetconfigent("udp")) == NULL)
     {
@@ -289,10 +302,6 @@ int nfs_Init_svc()
 #ifdef _USE_TIRPC_IPV6
   LogEvent(COMPONENT_DISPATCH, "netconfig found for UDPv6 and TCPv6");
 #endif
-
-  /* RW_lock need to be initialized */
-  rw_lock_init(&Svc_lock);
-  rw_lock_init(&Svc_fd_lock);
 #endif                          /* _USE_TIRPC */
 
 #ifndef _USE_TIRPC_IPV6
@@ -835,20 +844,30 @@ int nfs_Init_svc()
 
   /* Allocation of the SVCXPRT */
   LogEvent(COMPONENT_DISPATCH, "Allocation of the SVCXPRT");
-
-  if((nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp =
 #ifdef _USE_TIRPC
-      Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+  nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp =
+      svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp,
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp =
       Svcudp_bufcreate(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp,
-                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+		       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif
+  if(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCUDP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate NFS/UDP SVCXPRT");
     return -1;
   }
+
+#if _USE_TIRPC
+  /* install (slightly) customized sv_dg_recv */
+  p_xprt = nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp;
+  if (!p_xprt->xp_ops2->xp_control(p_xprt, SVCSET_XP_RECV, Svc_dg_recv)) 
+    {
+      return -1;
+    }
+#endif
 
 #ifdef _USE_TIRPC_IPV6
   nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp->xp_netid =
@@ -857,19 +876,35 @@ int nfs_Init_svc()
       strdup(netconfig_udpv6->nc_device);
 #endif                          /* _USE_TIRPC_IPV6 */
 
-  if((nfs_param.worker_param.nfs_svc_data.xprt_nfs_tcp =
 #ifdef _USE_TIRPC
-      Svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
-#else
-      Svctcp_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
-#endif
-  {
-    LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCTCP_CREATE, 0);
-    LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate NFS/TCP SVCXPRT");
-    return -1;
+  rc = listen(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp, SOMAXCONN);
+  if (rc) {
+      LogCrit(COMPONENT_DISPATCH, "NFS EXIT: tcp listen failed rc=%d", rc);
+      return -1;
   }
+  nfs_param.worker_param.nfs_svc_data.xprt_nfs_tcp =
+      svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp,
+		    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
+#else
+  nfs_param.worker_param.nfs_svc_data.xprt_nfs_tcp =
+      Svctcp_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp,
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
+#endif
+  if(nfs_param.worker_param.nfs_svc_data.xprt_nfs_tcp == NULL)
+   {
+     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCTCP_CREATE, 0);
+     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate NFS/TCP SVCXPRT");
+     return -1;
+   }
+
+#if _USE_TIRPC
+  /* install rendezvous_request method */
+  p_xprt = nfs_param.worker_param.nfs_svc_data.xprt_nfs_tcp;
+  if (!p_xprt->xp_ops2->xp_control(p_xprt, SVCSET_XP_RECV, Rendezvous_request)) 
+    {
+      return -1;
+    }
+#endif
 
 #ifdef _USE_TIRPC_IPV6
   if(listen
@@ -886,14 +921,16 @@ int nfs_Init_svc()
       strdup(netconfig_tcpv6->nc_device);
 #endif                          /* _USE_TIRPC_IPV6 */
 
-  if((nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp =
 #ifdef _USE_TIRPC
-      Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+  nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp =
+      svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp,
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp =
       Svcudp_bufcreate(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp,
-                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif
+  if(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCUDP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate MNT/UDP SVCXPRT");
@@ -907,14 +944,21 @@ int nfs_Init_svc()
       strdup(netconfig_udpv6->nc_device);
 #endif                          /* _USE_TIRPC_IPV6 */
 
-  if((nfs_param.worker_param.nfs_svc_data.xprt_mnt_tcp =
 #ifdef _USE_TIRPC
-      Svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+  rc = listen(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp, SOMAXCONN);
+  if (rc) {
+      LogCrit(COMPONENT_DISPATCH, "NFS EXIT: tcp listen failed rc=%d", rc);
+      return -1;
+  }
+  nfs_param.worker_param.nfs_svc_data.xprt_mnt_tcp =
+      svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp,
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_mnt_tcp =
       Svctcp_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif
+  if(nfs_param.worker_param.nfs_svc_data.xprt_mnt_tcp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCTCP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate MNT/TCP SVCXPRT");
@@ -922,28 +966,32 @@ int nfs_Init_svc()
   }
 
 #ifdef _USE_NLM
-  if((nfs_param.worker_param.nfs_svc_data.xprt_nlm_udp =
 #ifdef _USE_TIRPC
+  nfs_param.worker_param.nfs_svc_data.xprt_nlm_udp =
       Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_nlm_udp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
-      Svcudp_bufcreate(nfs_param.worker_param.nfs_svc_data.socket_nlm_udp,
-                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+  nfs_param.worker_param.nfs_svc_data.xprt_nlm_udp =
+     Svcudp_bufcreate(nfs_param.worker_param.nfs_svc_data.socket_nlm_udp,
+		      NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif                          /* _USE_TIRPC */
+  if(nfs_param.worker_param.nfs_svc_data.xprt_nlm_udp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCUDP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate NLM/UDP SVCXPRT");
     return -1;
   }
 
-  if((nfs_param.worker_param.nfs_svc_data.xprt_nlm_tcp =
 #ifdef _USE_TIRPC
-      Svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_nlm_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+  nfs_param.worker_param.nfs_svc_data.xprt_nlm_tcp =
+      svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_nlm_tcp,
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_nlm_tcp =
       Svctcp_create(nfs_param.worker_param.nfs_svc_data.socket_nlm_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif                          /* _USE_TIRPC */
+  if(nfs_param.worker_param.nfs_svc_data.xprt_nlm_tcp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCTCP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate NLM/TCP SVCXPRT");
@@ -952,28 +1000,32 @@ int nfs_Init_svc()
 #endif                          /* _USE_NLM */
 
 #ifdef _USE_QUOTA
-  if((nfs_param.worker_param.nfs_svc_data.xprt_rquota_udp =
 #ifdef _USE_TIRPC
+  nfs_param.worker_param.nfs_svc_data.xprt_rquota_udp =
       Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_rquota_udp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_rquota_udp =
       Svcudp_bufcreate(nfs_param.worker_param.nfs_svc_data.socket_rquota_udp,
-                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                       NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #endif                          /* _USE_TIRPC */
+  if(nfs_param.worker_param.nfs_svc_data.xprt_rquota_udp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCUDP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate RQUOTA/UDP SVCXPRT");
     return -1;
   }
 
-  if((nfs_param.worker_param.nfs_svc_data.xprt_rquota_tcp =
 #ifdef _USE_TIRPC
+  nfs_param.worker_param.nfs_svc_data.xprt_rquota_tcp =
       Svc_vc_create(nfs_param.worker_param.nfs_svc_data.socket_rquota_tcp,
-                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
+                    NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE);
 #else
+  nfs_param.worker_param.nfs_svc_data.xprt_rquota_tcp =
       Svctcp_create(nfs_param.worker_param.nfs_svc_data.socket_rquota_tcp,
                     NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
 #endif                          /* _USE_TIRPC */
+  if(nfs_param.worker_param.nfs_svc_data.xprt_rquota_tcp == NULL)
   {
     LogError(COMPONENT_DISPATCH, ERR_RPC, ERR_SVCTCP_CREATE, 0);
     LogCrit(COMPONENT_DISPATCH, "NFS EXIT: Cannot allocate RQUOTA/TCP SVCXPRT");
@@ -1040,7 +1092,7 @@ int nfs_Init_svc()
 #if ! defined( _USE_PROXY ) || defined ( _HANDLE_MAPPING )
   LogEvent(COMPONENT_DISPATCH, "Registering NFS V2/UDP");
 #ifdef _USE_TIRPC
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
               nfs_param.core_param.nfs_program,
               NFS_V2, nfs_rpc_dispatch_dummy, netconfig_udpv4))
 #else
@@ -1057,7 +1109,7 @@ int nfs_Init_svc()
 
   LogEvent(COMPONENT_DISPATCH, "Registering NFS V3/UDP");
 #ifdef _USE_TIRPC
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
               nfs_param.core_param.nfs_program,
               NFS_V3, nfs_rpc_dispatch_dummy, netconfig_udpv4))
 #else
@@ -1075,7 +1127,7 @@ int nfs_Init_svc()
 
   LogEvent(COMPONENT_DISPATCH, "Registering NFS V4/UDP");
 #ifdef _USE_TIRPC
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
               nfs_param.core_param.nfs_program,
               NFS_V4, nfs_rpc_dispatch_dummy, netconfig_udpv4))
 #else
@@ -1097,7 +1149,7 @@ int nfs_Init_svc()
 
 #ifdef _USE_TIRPC_IPV6
   LogEvent(COMPONENT_DISPATCH, "Registering NFS V2/UDPv6");
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_nfs_udp,
               nfs_param.core_param.nfs_program,
               NFS_V2, nfs_rpc_dispatch_dummy, netconfig_udpv6))
     {
@@ -1234,7 +1286,7 @@ int nfs_Init_svc()
 #if ! defined( _USE_PROXY ) || defined ( _HANDLE_MAPPING )
   LogEvent(COMPONENT_DISPATCH, "Registering MOUNT V1/UDP");
 #ifdef _USE_TIRPC
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
               nfs_param.core_param.mnt_program,
               MOUNT_V1, nfs_rpc_dispatch_dummy, netconfig_udpv4))
 #else
@@ -1251,7 +1303,7 @@ int nfs_Init_svc()
 
   LogEvent(COMPONENT_DISPATCH, "Registering MOUNT V3/UDP");
 #ifdef _USE_TIRPC
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
               nfs_param.core_param.mnt_program,
               MOUNT_V3, nfs_rpc_dispatch_dummy, netconfig_udpv4))
 #else
@@ -1269,7 +1321,7 @@ int nfs_Init_svc()
 
 #ifdef _USE_TIRPC_IPV6
   LogEvent(COMPONENT_DISPATCH, "Registering MOUNT V1/UDPv6");
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
               nfs_param.core_param.mnt_program,
               MOUNT_V1, nfs_rpc_dispatch_dummy, netconfig_udpv6))
     {
@@ -1280,7 +1332,7 @@ int nfs_Init_svc()
     nb_svc_mnt_ok += 1;
 
   LogEvent(COMPONENT_DISPATCH, "Registering MOUNT V3/UDPv6");
-  if(!svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
+  if(0 && !svc_reg(nfs_param.worker_param.nfs_svc_data.xprt_mnt_udp,
               nfs_param.core_param.mnt_program,
               MOUNT_V3, nfs_rpc_dispatch_dummy, netconfig_udpv6))
     {
@@ -1641,6 +1693,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
   int socket_index;
   int worker_index;
   int mount_flag = FALSE;
+  static int try_this = 0;
 
   /* portable access to fds_bits field */
   maskp = __FDS_BITS(readfds);
@@ -1728,9 +1781,6 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               LogFullDebug(COMPONENT_DISPATCH, "A NFS UDP request");
               pnfsreq->xprt = pnfsreq->nfs_udp_xprt;
               pnfsreq->ipproto = IPPROTO_UDP;
-
-              /* XXXX this is an NFS channel, the transport is UDP.  We could legitimately
-               * be seeing a REPLY for a callback */
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
           else if(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp == socket_index)
@@ -1978,7 +2028,15 @@ void rpc_dispatcher_svc_run(nfs_parameter_t * pnfs_param)
   while(TRUE)
     {
       /* Always work on a copy of Svc_fdset */
+#ifdef _USE_TIRPC
+      rc = rpc_control(RPC_SVC_FDSET_GET, &readfdset);
+      if (!rc) {
+	  LogCrit(COMPONENT_DISPATCH, "svc_run: failed reading fd_set");
+	  return;
+      }
+#else
       readfdset = Svc_fdset;
+#endif
 
       /* Select on a fdset build with all socket used in NFS/RPC */
       LogDebug(COMPONENT_DISPATCH, "Waiting for incoming RPC requests");
@@ -2084,7 +2142,7 @@ int nfs_Init_request_data(nfs_request_data_t * pdata)
 
 #ifdef _USE_TIRPC
   if((pdata->nfs_udp_xprt =
-      Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp,
+      svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp,
                     NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
 #else
   if((pdata->nfs_udp_xprt =
@@ -2098,7 +2156,7 @@ int nfs_Init_request_data(nfs_request_data_t * pdata)
 
 #ifdef _USE_TIRPC
   if((pdata->mnt_udp_xprt =
-      Svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp,
+      svc_dg_create(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp,
                     NFS_SEND_BUFFER_SIZE, NFS_RECV_BUFFER_SIZE)) == NULL)
 #else
   if((pdata->mnt_udp_xprt =

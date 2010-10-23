@@ -247,9 +247,15 @@ AM_CONDITIONAL(USE_PNFS, test "$enable_pnfs" = "yes")
 # TI-RPC
 GA_ENABLE_AM_CONDITION([tirpc],[enable TIRPC support],[USE_TIRPC])
 
+# We use a local TI-RPC which will track upstream development where
+# possible
+TIRPC_LIB=""
 if test "$enable_tirpc" == "yes"; then
 	AC_DEFINE(_USE_TIRPC,1,[enable TIRPC support])
-	AC_CHECK_LIB([tirpc], [svc_tli_create], [AC_DEFINE( _HAVE_TIRPC,1,[enable TIRPC support] ) ], [AC_MSG_ERROR( [TI-RPC could not be found...] ) ] )
+	GA_PROG_TIRPC
+	AC_CONFIG_SUBDIRS([tirpc])
+	CFLAGS="-I../tirpc/tirpc/ $CFLAGS"
+	TIRPC_LIB="tirpc/src/libtirpc.la"
 fi
 
 # IPv6
@@ -661,6 +667,7 @@ AC_SUBST(FSAL_LDFLAGS)
 AC_SUBST(FSAL_LIB)
 AC_SUBST(MFSL_LIB)
 AC_SUBST(PNFS_LIB)
+AC_SUBST(TIRPC_LIB)
 AC_SUBST(FS_NAME)
 AC_SUBST(SHARED_FSAL)
 AC_SUBST(SHARED_FSAL_PKG)

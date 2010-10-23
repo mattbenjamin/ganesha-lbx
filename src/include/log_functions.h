@@ -482,6 +482,11 @@ int log_vsnprintf(char *out, size_t n, char *format, va_list arguments);
 int log_snprintf(char *out, size_t n, char *format, ...);
 int log_fprintf(FILE * file, char *format, ...);
 
+/*
+ *  Re-export component logging to TI-RPC internal logging
+ */
+void rpc_warnx(/* const */ char *fmt, ...);
+
 #ifdef _SNMP_ADM_ACTIVE
 int getComponentLogLevel(snmp_adm_type_union * param, void *opt);
 int setComponentLogLevel(const snmp_adm_type_union * param, void *opt);

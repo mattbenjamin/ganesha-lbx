@@ -245,6 +245,36 @@ int nfs_prereq_init(char *program_name, char *host_name, int debug_level,
 
 #endif
 
+#if _USE_TIRPC
+  /* Install TI-RPC log indirection */
+  if (!tirpc_control(TIRPC_SET_WARNX, (warnx_t) rpc_warnx)) {
+      LogMajor(COMPONENT_INIT, "TI-RPC could not be initialized (warnx)");
+      exit(1);
+  }
+  /* Install TI-RPC allocator indirection.  Leak debugging for internal
+   * routines must be handled in those routines.  Nb, TI-RPC defines calloc
+   * for mem_alloc, for safety follow suit. */
+#ifdef _NO_BUDDY_SYSTEM
+  if (!tirpc_control(TIRPC_SET_MALLOC, (mem_alloc_t) malloc)) {
+      LogMajor(COMPONENT_INIT, "TI-RPC could not be initialized (alloc)");
+      exit(1);
+  }
+  if (!tirpc_control(TIRPC_SET_FREE, (mem_free_t) free)) {
+      LogMajor(COMPONENT_INIT, "TI-RPC could not be initialized (free)");
+      exit(1);
+  }
+#else
+  if (!tirpc_control(TIRPC_SET_MALLOC, (mem_alloc_t) BuddyMallocZ)) {
+      LogMajor(COMPONENT_INIT, "TI-RPC could not be initialized (alloc)");
+      exit(1);
+  }
+  if (!tirpc_control(TIRPC_SET_FREE, (mem_free_t) BuddyFree)) {
+      LogMajor(COMPONENT_INIT, "TI-RPC could not be initialized (free)");
+      exit(1);
+  }
+#endif /* !_NO_BUDDY_SYSTEM */
+#endif /* TIRPC */
+
   return 0;
 
 }

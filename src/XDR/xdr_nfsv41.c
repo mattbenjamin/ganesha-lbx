@@ -15,7 +15,10 @@
 #include <gssrpc/types.h>
 #include <gssrpc/rpc.h>
 #include <gssrpc/xdr.h>
+#ifndef _USE_TIRPC
+/* now provided in TI-RPC */
 #define xdr_uint32_t  xdr_u_int32
+#endif
 #define AUTH_SYS        1
 bool_t xdr_uint64_t(XDR * __xdrs, uint64_t * __up);
 bool_t xdr_int64_t(XDR * __xdrs, uint64_t * __up);
@@ -42,6 +45,7 @@ bool_t xdr_int64_t(XDR * __xdrs, uint64_t * __up);
 typedef struct authsys_parms authsys_parms;
 #endif                          /*  _AUTH_SYS_DEFINE_FOR_NFSv41 */
 
+#ifndef _USE_TIRPC /* XXX remove */
 bool_t xdr_int32_t(xdrs, objp)
 register XDR *xdrs;
 int32_t *objp;
@@ -73,6 +77,7 @@ uint32_t *objp;
     return (FALSE);
   return (TRUE);
 }
+#endif
 
 bool_t xdr_nfs_ftype4(XDR * xdrs, nfs_ftype4 * objp)
 {

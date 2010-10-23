@@ -84,7 +84,6 @@
 /* Useful prototypes */
 int nfs_rpc_get_worker_index(int mount_protocol_flag);
 
-extern fd_set Svc_fdset;
 extern nfs_worker_data_t *workers_data;
 extern nfs_parameter_t nfs_param;
 extern exportlist_t *pexportlist;
@@ -177,7 +176,6 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
                   "CRITICAL ERROR: empty request pool for the chosen worker ! Exiting...");
           exit(0);
         }
-
       xprt = Xports[tcp_sock];
       if(xprt == NULL)
         {

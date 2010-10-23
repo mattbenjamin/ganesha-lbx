@@ -32,3 +32,17 @@ AC_DEFUN([GA_PROG_DOXYGEN],
         AC_CHECK_PROGS(DOXYGEN, doxygen)
 ])
 
+#
+# XXXX This macro refreshes tirpc.  Needs work, obviously.
+#
+# GA_PROG_TIRPC
+#
+AC_DEFUN([GA_PROG_TIRPC],
+[
+        if test ! -f "tirpc/configure"; then
+	   cd tirpc
+           sh autogen.sh
+	   ./configure CFLAGS="-O0 -g3" --enable-gss --prefix=/usr
+	   cd ..
+        fi
+])

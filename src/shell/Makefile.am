@@ -68,7 +68,7 @@ __FS_NAME__ganeshell_SOURCES    = Getopt.c                            \
                                   ../include/nfs_tools.h              \
                                   ../include/stuff_alloc.h
 
-		
+
 shell_libs =      ../NFS_Protocols/libnfsproto.la                    \
                   ../$(CACHE_INODE_DIR)/libcache_inode.la            \
                    $(PNFS_LIB)                                       \
@@ -87,6 +87,7 @@ shell_libs =      ../NFS_Protocols/libnfsproto.la                    \
                   ../Log/liblog.la                                   \
                   ../ConfigParsing/libConfigParsing.la               \
                   ../XDR/libnfs_mnt_xdr.la                           \
+                  ../tirpc/src/libtirpc.la                        \
 		  ../Common/libcommon_utils.la
 
 __FS_NAME__ganeshell_LDADD = $(shell_libs)                           \
