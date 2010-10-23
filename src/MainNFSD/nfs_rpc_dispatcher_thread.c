@@ -1638,6 +1638,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
   LRU_entry_t *pentry = NULL;
   LRU_status_t status;
   nfs_request_data_t *pnfsreq = NULL;
+  int socket_index;
   int worker_index;
   int mount_flag = FALSE;
 
@@ -1649,7 +1650,9 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
       for(mask = *maskp++; bit = ffs(mask); mask ^= (1 << (bit - 1)))
         {
           /* sock has input waiting */
-          xprt = Xports[sock + bit - 1];
+          socket_index = sock + bit - 1;
+
+          xprt = Xports[socket_index];
           if(xprt == NULL)
             {
               /* But do we control sock? */
@@ -1659,8 +1662,8 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
             }
 
           /* A few thread manage only mount protocol, check for this */
-          if((nfs_param.worker_param.nfs_svc_data.socket_mnt_udp == sock + bit - 1) ||
-             (nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp == sock + bit - 1))
+          if((nfs_param.worker_param.nfs_svc_data.socket_mnt_udp == socket_index) ||
+             (nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp == socket_index))
             mount_flag = TRUE;
           else
             mount_flag = FALSE;
@@ -1719,16 +1722,18 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
            * all the other cases are requests from already connected TCP Clients
            */
 
-          if(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp == sock + bit - 1)
+          if(nfs_param.worker_param.nfs_svc_data.socket_nfs_udp == socket_index)
             {
               /* This is a regular UDP connection */
               LogFullDebug(COMPONENT_DISPATCH, "A NFS UDP request");
               pnfsreq->xprt = pnfsreq->nfs_udp_xprt;
               pnfsreq->ipproto = IPPROTO_UDP;
 
+              /* XXXX this is an NFS channel, the transport is UDP.  We could legitimately
+               * be seeing a REPLY for a callback */
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
-          else if(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_mnt_udp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH, "A MOUNT UDP request");
               pnfsreq->xprt = pnfsreq->mnt_udp_xprt;
@@ -1737,7 +1742,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
 #ifdef _USE_NLM
-          else if(nfs_param.worker_param.nfs_svc_data.socket_nlm_udp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_nlm_udp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH, "A NLM UDP request");
               pnfsreq->xprt = pnfsreq->nlm_udp_xprt;
@@ -1746,7 +1751,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
             }
 #endif                          /* _USE_NLM */
 #ifdef _USE_QUOTA
-          else if(nfs_param.worker_param.nfs_svc_data.socket_rquota_udp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_rquota_udp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH, "A RQUOTA UDP request");
               pnfsreq->xprt = pnfsreq->rquota_udp_xprt;
@@ -1754,7 +1759,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
 #endif                          /* _USE_QUOTA */
-          else if(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_nfs_tcp == socket_index)
             {
               /* 
                * This is an initial tcp connection 
@@ -1770,7 +1775,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
 
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
-          else if(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_mnt_tcp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH,
                            "An initial MOUNT TCP request from a new client");
@@ -1780,7 +1785,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
 #ifdef _USE_NLM
-          else if(nfs_param.worker_param.nfs_svc_data.socket_nlm_tcp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_nlm_tcp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH, "An initial NLM request from a new client");
               pnfsreq->xprt = nfs_param.worker_param.nfs_svc_data.xprt_nlm_tcp;
@@ -1790,7 +1795,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
             }
 #endif                          /* _USE_NLM */
 #ifdef _USE_QUOTA
-          else if(nfs_param.worker_param.nfs_svc_data.socket_rquota_tcp == sock + bit - 1)
+          else if(nfs_param.worker_param.nfs_svc_data.socket_rquota_tcp == socket_index)
             {
               LogFullDebug(COMPONENT_DISPATCH,
                            "An initial RQUOTA request from a new client");
@@ -1802,7 +1807,8 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
 #endif                          /* _USE_QUOTA */
           else
             {
-              /* This is a regular tcp request on an established connection, should be handle by a dedicated thread */
+              /* XXX If this is a regular tcp request on an established connection, it will be handled
+               * by a dedicated thread.  However, as above, it may be a callback reply */
               LogFullDebug(COMPONENT_DISPATCH,
                            "A NFS TCP request from an already connected client");
               pnfsreq->tcp_xprt = xprt;
@@ -1812,7 +1818,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               pnfsreq->status = SVC_RECV(pnfsreq->xprt, &(pnfsreq->msg));
             }
           LogFullDebug(COMPONENT_DISPATCH, "Status for SVC_RECV on socket %d is %d",
-                       sock + bit - 1, pnfsreq->status);
+                       socket_index, pnfsreq->status);
 
           /* If status is ok, the request will be processed by the related
            * worker, otherwise, it should be released by being tagged as invalid*/
