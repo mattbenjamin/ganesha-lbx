@@ -2136,9 +2136,10 @@ int nfs_Init_request_data(nfs_request_data_t * pdata)
     }
 #endif                          /* _USE_QUOTA */
 
+#ifndef _USE_TIRPC
   pdata->xprt = NULL;
-
   pdata->xprt_copy = Svcxprt_copycreate();
+#endif
 
   return 0;
 }                               /* nfs_Init_request_data */

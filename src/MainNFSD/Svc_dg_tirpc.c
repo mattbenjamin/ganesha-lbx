@@ -57,7 +57,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netconfig.h>
+#ifdef _SOLARIS
 #include <netdir.h>
+#endif
 #include <err.h>
 
 #include <rpc/rpc.h>

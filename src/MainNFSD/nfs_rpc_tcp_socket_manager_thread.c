@@ -79,6 +79,7 @@
 #include "nfs_file_handle.h"
 #include "nfs_stat.h"
 #include "SemN.h"
+#include <assert.h>
 
 /* Useful prototypes */
 int nfs_rpc_get_worker_index(int mount_protocol_flag);
@@ -370,11 +371,15 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
                 nfs_rpc_get_args(pnfsreq, &funcdesc);
             }
 
+#ifdef _USE_TIRPC
+	  /* XXX new Svcxprt_copy behavior looks highly suspicious */
+	  assert(pnfsreq->xprt);
+#else
           /* Update a copy of SVCXPRT and pass it to the worker thread to use it. */
           xprt_copy = pnfsreq->xprt_copy;
           Svcxprt_copy(xprt_copy, xprt);
           pnfsreq->xprt = xprt_copy;
-
+#endif
           pentry->buffdata.pdata = (caddr_t) pnfsreq;
           pentry->buffdata.len = sizeof(*pnfsreq);
 
