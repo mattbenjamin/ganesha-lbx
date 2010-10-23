@@ -1472,7 +1472,8 @@ static void nfs_Start_threads(nfs_parameter_t * pnfs_param)
  *
  */
 
-static void nfs_Init(const nfs_start_info_t * p_start_info)
+void
+nfs_Init(const nfs_start_info_t * p_start_info)
 {
   hash_table_t *ht = NULL;      /* Cache inode main hash table */
 
