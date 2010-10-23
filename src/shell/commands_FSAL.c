@@ -237,7 +237,7 @@
 #include "Getopt.h"
 #include "stuff_alloc.h"
 
-int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib);
+int nfs_get_fsalpathlib_conf(char *PathLib);
 
 /* global FS configuration variables */
 

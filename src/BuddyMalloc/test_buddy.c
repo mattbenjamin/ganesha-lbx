@@ -1247,7 +1247,7 @@ int main(int argc, char **argv)
 
   SetDefaultLogging("TEST");
   SetNamePgm("test_buddy");
-  InitLogging();
+  InitLogging("test_buddy", NULL, NULL, NIV_NULL);
 
   for(th_index = 0; th_index < NB_THREADS; th_index++)
     {

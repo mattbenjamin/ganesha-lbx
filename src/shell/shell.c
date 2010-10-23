@@ -390,7 +390,7 @@ int shell_Init(int verbose, char *input_file, char *prompt, int shell_index)
   else
     SetNameHost(localmachine);
 
-  InitLogging();
+  InitLogging("shell", NULL, NULL, NIV_NULL);
 
   /* retrieve/initialize shell context */
 

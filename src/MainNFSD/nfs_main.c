@@ -270,9 +270,10 @@ int main(int argc, char *argv[])
     }
 
   /* initialize memory and logging */
-  if(nfs_prereq_init(exec_name, host_name, debug_level, log_path))
-    {
-      fprintf(stderr, "NFS MAIN: Error initializing NFSd prerequisites\n");
+  if(nfs_prereq_init(exec_name, host_name, debug_level, log_path,
+                     my_config_path)) {
+      LogMajor(COMPONENT_INIT,
+              "NFS MAIN: Error initializing NFSd prerequisites\n");
       exit(1);
     }
 

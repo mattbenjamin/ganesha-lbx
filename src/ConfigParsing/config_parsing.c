@@ -19,7 +19,7 @@
  * ---------------------------------------
  */
 #include "config.h"
-#include "config_parsing.h"
+#include "global_config.h" /* expanded config interface (preferred) */
 #include "analyse.h"
 #include <stdio.h>
 #include <errno.h>
@@ -39,6 +39,9 @@ typedef struct config_struct_t
   list_items *syntax_tree;
 
 } config_struct_t;
+
+
+global_config_t global_config;
 
 /***************************************
  * ACCES AUX VARIABLES EXTERNES

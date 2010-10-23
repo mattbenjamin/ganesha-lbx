@@ -41,6 +41,7 @@ typedef enum log_components
   COMPONENT_ALL = 0,               /* Used for changing logging for all components */
   COMPONENT_LOG,                   /* Keep this first, some code depends on it being the first component */
   COMPONENT_LOG_EMERG,             /* Component for logging emergency log messages - avoid infinite recursion */
+  COMPONENT_DEFAULT,               /* Config-time default logging profile */
   COMPONENT_MEMALLOC,
   COMPONENT_STATES,
   COMPONENT_MEMLEAKS,

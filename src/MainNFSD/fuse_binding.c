@@ -255,7 +255,7 @@ int ganefuse_main(int argc, char *argv[],
 
   /* initialize memory and logging */
 
-  if(nfs_prereq_init(exec_name, host_name, debug_level, log_path))
+  if(nfs_prereq_init(exec_name, host_name, debug_level, config_path))
     {
       LogCrit(COMPONENT_MAIN, "NFS MAIN: Error initializing NFSd prerequisites");
       exit(1);

@@ -71,7 +71,7 @@
 #include "nfs_tools.h"
 #include "nfs_proto_functions.h"
 #include "nfs_dupreq.h"
-#include "config_parsing.h"
+#include "global_config.h" /* expanded config interface */
 #include "SemN.h"
 #include "external_tools.h"
 #include <sys/time.h>
@@ -108,6 +108,12 @@ char config_path[MAXPATHLEN];
 
 extern int nfs_do_terminate;
 extern char my_config_path[MAXPATHLEN];
+
+/** 
+ * Keep a protected, global representation of the server configuration
+ * for subsystems to reuse.
+ */
+global_config_t global_config;
 
 #ifdef _USE_GSSRPC
 bool_t Svcauth_gss_set_svc_name(gss_name_t name);
@@ -197,21 +203,22 @@ void *sigmgr_thread( void * arg )
  * nfs_prereq_init:
  * Initialize NFSd prerequisites: memory management, logging, ...
  */
-int nfs_prereq_init(char *program_name, char *host_name, int debug_level, char *log_path)
+int nfs_prereq_init(char *program_name, char *host_name, int debug_level,
+                    char *log_path, /* log path supplied at cmdline  */
+                    char *file_path /* to config file */)
 {
   int rc;
 
+  /* Global config */
+  rc = global_config_init(file_path);
+  if (rc) {
+      LogCrit(COMPONENT_INIT, "nfs_prereq_init: global_config_init returned "
+              "%d\n", rc);
+      exit(1); /* abort() would stop in the debugger (and core) */
+  }
+
   /* Initialize logging */
-
-  SetNamePgm(program_name);
-  SetNameFunction("main");
-  SetNameHost(host_name);
-  InitLogging();
-  if (log_path[0] != '\0')
-    SetDefaultLogging(log_path);
-
-  if (debug_level >= 0)
-    SetLogLevel(debug_level);
+  InitLogging(program_name, host_name, log_path, debug_level);
 
   /* Register error families */
   AddFamilyError(ERR_POSIX, "POSIX Errors", tab_systeme_status);

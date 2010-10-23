@@ -46,7 +46,9 @@
 #include <libgen.h>
 
 #include "log_macros.h"
-//#include "nfs_core.h"
+#include "nfs_core.h"
+#include "config_parsing.h"
+#include "global_config.h"
 
 /* La longueur d'une chaine */
 #define STR_LEN_TXT      2048
@@ -284,6 +286,7 @@ static void ArmeSignal(int signal, void (*action) ())
     }
 }                               /* ArmeSignal */
 
+
 /*
  *
  * Cinq fonctions pour gerer le niveau de debug et le controler
@@ -296,7 +299,6 @@ static void ArmeSignal(int signal, void (*action) ())
  * ReturnLevelDebug
  *
  */
-
 void SetComponentLogLevel(log_components_t component, int level_to_set)
 {
   if (component == COMPONENT_ALL)
@@ -364,42 +366,241 @@ static void DecrementeLevelDebug()
              ReturnLevelInt(LogComponents[COMPONENT_ALL].comp_log_level));
 }                               /* DecrementeLevelDebug */
 
-void InitLogging()
+static config_item_t
+get_log_config_item(config_file_t config_struct, char *sub_block_name,
+                    char *item_name)
 {
-  int i;
-  char *env_value;
-  int newlevel, component, oldlevel;
+    config_item_t item;
+    char sbuf[256];
 
-  /* Initialisation du tableau des familys */
-  tab_family[0].num_family = 0;
-  tab_family[0].tab_err = (family_error_t *) tab_systeme_err;
-  strcpy(tab_family[0].name_family, "Errors Systeme UNIX");
+    sprintf(sbuf, "LOG::%s::%s", sub_block_name, item_name);
+    item = config_FindItemByName(config_struct, sbuf);
 
-  for(i = 1; i < MAX_NUM_FAMILY; i++)
-    tab_family[i].num_family = UNUSED_SLOT;
-
-  ArmeSignal(SIGUSR1, IncrementeLevelDebug);
-  ArmeSignal(SIGUSR2, DecrementeLevelDebug);
-
-  for(component = COMPONENT_ALL; component < COMPONENT_COUNT; component++)
-    {
-      env_value = getenv(LogComponents[component].comp_name);
-      if (env_value == NULL)
-        continue;
-      newlevel = ReturnLevelAscii(env_value);
-      if (newlevel == -1) {
-        LogMajor(COMPONENT_LOG, "Environment variable %s exists, but the value %s is not a valid log level.",
-                 LogComponents[component].comp_name, env_value);
-        continue;
-      }
-      oldlevel = LogComponents[component].comp_log_level;
-      LogComponents[component].comp_log_level = newlevel;
-      LogChanges("Using environment variable to switch log level for %s from %s to %s",
-                 LogComponents[component].comp_name, ReturnLevelInt(oldlevel),
-                 ReturnLevelInt(newlevel));
+    /* We expect sbuf to address a var item within a component subblock
+     * of LOG */
+    if (item && config_ItemType(item) != CONFIG_ITEM_VAR) {
+        LogCrit(COMPONENT_INIT,
+                "NFS STARTUP: invalid log component var item (%s)\n", sbuf);
+        item = NULL;
     }
 
-}                               /* InitLevelDebug */
+    return (item);
+}
+
+static int32_t
+preinit_logprefs_from_config(config_file_t config_struct,
+                             config_item_t log_block)
+{
+    int32_t component, code2, code = 0;
+    config_item_t sub_block, all_path, all_level, def_path, def_level,
+        item_path, item_level;
+    char sbuf[256], *ck, *cv;
+
+    /* Is config block valid? */
+    if(config_ItemType(log_block) != CONFIG_ITEM_BLOCK) {
+      code = 1;
+      LogCrit(COMPONENT_INIT,
+              "NFS STARTUP: Invalid config file item type (label %s)\n",
+              CONF_LABEL_LOG);
+      goto out;
+    }
+
+    /* If COMPONENT_ALL values are present, stash those */
+    all_path = all_level = NULL;
+    sub_block = config_FindItemByName(config_struct, "LOG::COMPONENT_ALL");
+    if (sub_block && (config_ItemType(sub_block) == CONFIG_ITEM_BLOCK)) {
+        all_path = get_log_config_item(config_struct, "COMPONENT_ALL",
+                                       "Path");
+        all_level = get_log_config_item(config_struct, "COMPONENT_ALL",
+                                        "Level");
+    }
+
+    /* If COMPONENT_DEFAULT values are present, stash those */
+    def_path = def_level = NULL;
+    sub_block = config_FindItemByName(config_struct, "LOG::COMPONENT_DEFAULT");
+    if (sub_block && (config_ItemType(sub_block) == CONFIG_ITEM_BLOCK)) {
+        def_path = get_log_config_item(config_struct, "COMPONENT_DEFAULT",
+                                       "Path");
+        def_level = get_log_config_item(config_struct, "COMPONENT_DEFAULT",
+                                        "Level");
+    }
+
+    /* We've handled COMPONENT_ALL in position 0, skip that.  Per comment in
+     * log_macros.h, there is code which assumes COMPONENT_LOG is in position
+     * one, so COMPONENT_DEFAULT can't be moved to position one and skipped
+     * implicitly (ATM) */
+    for(component = COMPONENT_LOG; component < COMPONENT_COUNT;
+        component++) {
+
+        if (component == COMPONENT_DEFAULT)
+	  continue;
+
+	if (!LogComponents[component].comp_name)
+	  continue;
+        
+        /* Find this component's sub block by name, if present */
+        sprintf(sbuf, "%s", LogComponents[component].comp_name);
+
+        if (all_path)
+            item_path = all_path;
+        else {
+            /* Check for specific setting */
+            item_path = get_log_config_item(config_struct, sbuf, "Path");
+            if (!item_path && def_path)
+                item_path = def_path;
+        }
+
+        if (item_path) {
+            (void) config_GetKeyValue(item_path, &ck, &cv);
+            SetComponentLogFile(component, cv);
+        }
+        
+        if (all_level)
+            item_level = all_level;
+        else {
+            item_level = get_log_config_item(config_struct, sbuf, "Level");
+            if (!item_level && def_level)
+                item_level = def_level;
+        }
+
+        if (item_level) {
+            (void) config_GetKeyValue(item_level, &ck, &cv);
+            SetComponentLogLevel(component, ReturnLevelAscii(cv));
+        }
+
+    } /* each component */
+    
+out:
+        return (code);
+
+}    /* preinit_from_config */
+
+
+static int32_t
+override_loglevels_from_env()
+{
+    int32_t code = 0;
+    int newlevel, component, oldlevel, all_level;
+    char *env_value;
+
+    /* if the environment has a valid loglevel value for COMPONENT_ALL, then
+     * all components are overridden to its value
+     */
+    all_level = -1;
+    env_value = getenv(LogComponents[COMPONENT_ALL].comp_name);
+    if (env_value) {
+        all_level = ReturnLevelAscii(env_value);
+    }
+
+    /* set the value for each environment-provided component, or the for all
+     * components if we've seen a value for COMPONENT_ALL */
+    for(component = COMPONENT_LOG; component < COMPONENT_COUNT; component++) {
+        if (all_level >= 0) {
+            newlevel = all_level;
+        } else {
+            if (! LogComponents[component].comp_name)
+                continue;
+            env_value = getenv(LogComponents[component].comp_name);
+            if (env_value == NULL)
+                continue;
+            newlevel = ReturnLevelAscii(env_value);
+            if (newlevel == -1) {
+                LogMajor(COMPONENT_LOG, "Environment variable %s exists, "
+                         "but the value %s is not a valid log level.",
+                         LogComponents[component].comp_name,
+                         env_value);
+                continue;
+            }
+        } /* !all_level  */
+
+        /* actually sets the log level for component */
+        oldlevel = LogComponents[component].comp_log_level;
+        LogComponents[component].comp_log_level = newlevel;
+        LogChanges("Using environment variable to switch log level for %s "
+                   "from %s to %s",
+                   LogComponents[component].comp_name, 
+                   ReturnLevelInt(oldlevel),
+                   ReturnLevelInt(newlevel));
+    }
+}    /* override_loglevels_from_env */
+
+int32_t
+InitLogging(char *program_name, char *host_name, char *log_path,
+                       int debug_level)
+{
+    int i, def_log;
+    config_file_t config_struct;
+    config_item_t log_block;
+    int32_t code = 0;
+
+    config_struct = get_global_config(GLOBAL_CONFIG_SHARED);
+    if(!config_struct) {
+        LogCrit(COMPONENT_INIT, "NFS STARTUP: Error setting initial logging "
+                "configuration\n");
+      code = 1;
+      goto out;
+    }
+
+    SetNamePgm(program_name);
+    SetNameFunction("main");
+    SetNameHost(host_name);
+
+    /**
+     * The following rules apply:
+     * 1. if there is a value for COMPONENT_ALL, then it's value overrides
+     * any other value (for log level)--so we SET the value of comp_log_level
+     * at all component indices to the given level in that case
+     * 2. otherwise, if there is a value for COMPONENT_DEFAULT, that value
+     * shall become the log_level at each component index not set explicitly,
+     * either in the environment, or from the config file (but overriding
+     * COMPONENT_DEFAULT log_level value set in the config file)
+     * 3. in consideration of 1 and 2, the log_level and log_path shall be
+     * set to any supplied value in the config_file, any value in the
+     * enviroment for log_level of that component shall override
+     */
+
+    /* Find the LOG config section */
+    log_block = config_FindItemByName(config_struct, CONF_LABEL_LOG);
+    if (log_block) {
+        code = preinit_logprefs_from_config(config_struct, log_block);
+        /* don't continue if config file is invalid */
+        if (code)
+            goto cleanup;
+    }
+
+    /* If a default log level was supplied at the command line, then it
+     * overrides the path value for COMPONENT_DEFAULT */
+    if (debug_level >= 0)
+        SetLogLevel(debug_level);
+
+    /* If a default log path was supplied at the command line, then it
+     * overrides the path value for COMPONENT_DEFAULT */
+    if (log_path[0] != '\0')
+        SetDefaultLogging(log_path);
+
+    /* allow log settings from the process environment to override
+     * whatever has been set up to this point */
+    code = override_loglevels_from_env();
+
+    /* Initialisation du tableau des familys */
+    tab_family[0].num_family = 0;
+    tab_family[0].tab_err = (family_error_t *) tab_systeme_err;
+    strcpy(tab_family[0].name_family, "Errors Systeme UNIX");
+
+    for(i = 1; i < MAX_NUM_FAMILY; i++)
+        tab_family[i].num_family = UNUSED_SLOT;
+
+    ArmeSignal(SIGUSR1, IncrementeLevelDebug);
+    ArmeSignal(SIGUSR2, DecrementeLevelDebug);
+
+cleanup:
+    /* release global_config when done */
+    put_global_config(GLOBAL_CONFIG_SHARED);
+
+out:
+    return (code);
+
+}    /* InitLogging */
 
 /*
  * Une fonction d'affichage tout a fait generique

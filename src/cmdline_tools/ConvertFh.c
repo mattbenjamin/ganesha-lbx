@@ -248,7 +248,7 @@ int main(int argc, char *argv[])
 
   /* initialize memory and logging */
 
-  if(nfs_prereq_init("convert_fh", "localhost", NIV_MAJ, "/dev/tty"))
+  if(nfs_prereq_init("convert_fh", "localhost", NIV_MAJ, "/dev/tty", path_cfg))
     {
       fprintf(stderr, "Error initializing logging and memory\n");
       exit(1);

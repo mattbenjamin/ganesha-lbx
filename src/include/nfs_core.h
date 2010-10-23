@@ -137,6 +137,7 @@
 #define CONF_LABEL_GID_MAPPER_TABLE "Groups"
 #define CONF_LABEL_IP_NAME_HOSTS    "Hosts"
 #define CONF_LABEL_NFSV4_REFERRALS  "NFSv4_Referrals"
+#define CONF_LABEL_LOG              "LOG"
 
 /* Worker and sidpatcher stack size */
 #define THREAD_STACK_SIZE  2116488

@@ -110,7 +110,7 @@
 #include "nfs_tools.h"
 #include "nfs_proto_functions.h"
 #include "nfs_dupreq.h"
-#include "config_parsing.h"
+#include "global_config.h" /* expanded config interface */
 
 /**
  *
@@ -1323,7 +1323,8 @@ void Print_param_in_log(nfs_parameter_t * pparam)
   Print_param_worker_in_log(&(pparam->worker_param));
 }                               /* Print_param_in_log */
 
-int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib)
+
+int nfs_get_fsalpathlib_conf(char *PathLib)
 {
   int var_max;
   int var_index;
@@ -1333,17 +1334,17 @@ int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib)
   config_item_t block;
   unsigned int found = FALSE;
   config_file_t config_struct;
+  int32_t code = 0;
 
   /* Is the config tree initialized ? */
-  if(configPath == NULL || PathLib == NULL)
+  if(PathLib == NULL)
     return 1;
 
-  config_struct = config_ParseFile(configPath);
-
+  config_struct = get_global_config(GLOBAL_CONFIG_SHARED);
   if(!config_struct)
     {
-      LogCrit(COMPONENT_CONFIG, "NFS STARTUP: Error while parsing %s: %s", configPath,
-                 config_GetErrorMsg());
+      LogCrit(COMPONENT_CONFIG, "NFS STARTUP: Error while parsing config: %s",
+              config_GetErrorMsg());
       exit(1);
     }
 
@@ -1351,12 +1352,14 @@ int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib)
   if((block = config_FindItemByName(config_struct, CONF_LABEL_NFS_CORE)) == NULL)
     {
       /* LogCrit(COMPONENT_CONFIG, "Cannot read item \"%s\" from configuration file", CONF_LABEL_NFS_CORE  ) ; */
-      return 1;
+      code = 1;
+      goto cleanup;
     }
   else if(config_ItemType(block) != CONFIG_ITEM_BLOCK)
     {
       /* Expected to be a block */
-      return 1;
+      code = 1;
+      goto cleanup;
     }
 
   var_max = config_GetNbItems(block);
@@ -1373,7 +1376,8 @@ int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib)
           LogCrit(COMPONENT_CONFIG,
                   "Error reading key[%d] from section \"%s\" of configuration file.",
                   var_index, CONF_LABEL_NFS_CORE);
-          return CACHE_INODE_INVALID_ARGUMENT;
+          code = CACHE_INODE_INVALID_ARGUMENT;
+          goto cleanup;
         }
 
       if(!strcasecmp(key_name, "FSAL_Shared_Library"))
@@ -1385,7 +1389,12 @@ int nfs_get_fsalpathlib_conf(char *configPath, char *PathLib)
     }
 
   if(!found)
-    return 1;
+      code = 1;
 
-  return 0;
+cleanup:
+  /* release global_config when done */
+  put_global_config(GLOBAL_CONFIG_SHARED);
+
+  return (code);
+
 }                               /* nfs_get_fsalpathlib_conf */

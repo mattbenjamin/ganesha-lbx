@@ -460,12 +460,20 @@ int AddFamilyError(int num_family, char *nom_family, family_error_t * tab_err);
 
 char *ReturnNameFamilyError(int num_family);
 
-void InitLogging();        /* not thread safe */
+int32_t InitLogging(char *program_name, char *host_name, char *log_path,
+                    int debug_level);
 
 void SetLevelDebug(int level_to_set);    /* not thread safe */
 
 int ReturnLevelAscii(const char *LevelEnAscii);
 char *ReturnLevelInt(int level);
+
+/**
+  * Initialize component (subsystem) log channels and levels using the
+  * global configuration, environment, and program arguments
+  */
+extern int32_t init_component_logging(char *program_name, char *host_name,
+                                      char *log_path, int debug_level);
 
 int MakeLogError(char *buffer, int num_family, int num_error, int status,
                   int ma_ligne);
