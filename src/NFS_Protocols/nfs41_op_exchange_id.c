@@ -114,6 +114,7 @@ int nfs41_op_exchange_id(struct nfs_argop4 *op,
   clientid4 clientid;
   nfs_client_id_t nfs_clientid;
   nfs_worker_data_t *pworker = NULL;
+  uint32_t eia_flags = arg_EXCHANGE_ID4.eia_flags;
 
   pworker = (nfs_worker_data_t *) data->pclient->pworker;
 
@@ -147,7 +148,26 @@ int nfs41_op_exchange_id(struct nfs_argop4 *op,
       res_EXCHANGE_ID4.eir_status = NFS4ERR_INVAL;
       return res_EXCHANGE_ID4.eir_status;
     }
-#endif 
+#endif
+      LogDebug(COMPONENT_NFS_V4, "EXCHANGE_ID eia_flags %s%s%s%s%s%s%s%s%s\n",
+               (eia_flags & EXCHGID4_FLAG_SUPP_MOVED_REFER) ?
+               " EXCHGID4_FLAG_SUPP_MOVED_REFER" : "",
+               (eia_flags & EXCHGID4_FLAG_SUPP_MOVED_MIGR) ?
+               " EXCHGID4_FLAG_SUPP_MOVED_MIGR" : "",
+               (eia_flags & EXCHGID4_FLAG_BIND_PRINC_STATEID) ?
+               " EXCHGID4_FLAG_BIND_PRINC_STATEID" : "",
+               (eia_flags & EXCHGID4_FLAG_USE_NON_PNFS) ?
+               " EXCHGID4_FLAG_USE_NON_PNFS" : "",
+               (eia_flags & EXCHGID4_FLAG_USE_PNFS_MDS) ?
+               " EXCHGID4_FLAG_USE_PNFS_MDS" : "",
+               (eia_flags & EXCHGID4_FLAG_USE_PNFS_DS) ?
+               " EXCHGID4_FLAG_USE_PNFS_DS" : "",
+               (eia_flags & EXCHGID4_FLAG_MASK_PNFS) ?
+               " EXCHGID4_FLAG_MASK_PNFS" : "",
+               (eia_flags & EXCHGID4_FLAG_UPD_CONFIRMED_REC_A) ?
+               " EXCHGID4_FLAG_SUPP_MOVED_REFER" : "",
+               (eia_flags & EXCHGID4_FLAG_CONFIRMED_R) ?
+               " EXCHGID4_FLAG_UPD_CONFIRMED_REC_A" : "");
 
   /* Does this id already exists ? */
   if(nfs_client_id_get(clientid, &nfs_clientid) == CLIENT_ID_SUCCESS)
