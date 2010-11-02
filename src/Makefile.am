@@ -22,6 +22,7 @@ SUBDIRS += Log 		      \
           File_Content_Policy \
           XDR                 \
           NFS_Protocols       \
+          PNFS                \
           support             \
           IdMapper            \
           snmp_adm            \
