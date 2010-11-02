@@ -145,7 +145,8 @@ LRU_list_t *LRU_Init(LRU_parameter_t lru_param, LRU_status_t * pstatus)
   plru->parameter = lru_param;
 
   /* Pre allocate entries */
-  MakePool(&plru->lru_entry_pool, lru_param.nb_entry_prealloc, LRU_entry_t, NULL, NULL);
+  MakePool(&plru->lru_entry_pool, lru_param.nb_entry_prealloc, LRU_entry_t,
+	   NULL, NULL);
   NamePool(&plru->lru_entry_pool, "%s LRU Entry Pool", name);
   if(!IsPoolPreallocated(&plru->lru_entry_pool))
     {
