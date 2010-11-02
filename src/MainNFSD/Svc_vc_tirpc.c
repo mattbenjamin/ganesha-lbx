@@ -155,14 +155,14 @@ struct rpc_msg *msg;
       memcpy(&sin6, &addr, len);
     }
   newxprt->xp_rtaddr.buf = Mem_Alloc(len);
+  newxprt->xp_rtaddr.maxlen = newxprt->xp_rtaddr.len = len;
   if(newxprt->xp_rtaddr.buf == NULL)
-    return (FALSE);
+      return (FALSE);
 
   if(addr.ss_family == AF_INET)
     memcpy(newxprt->xp_rtaddr.buf, &addr, len);
   else
     memcpy(newxprt->xp_rtaddr.buf, &sin6, len);
-  newxprt->xp_rtaddr.maxlen = newxprt->xp_rtaddr.len = len;
 #ifdef PORTMAP
   if(sin6.sin6_family == AF_INET6 || sin6.sin6_family == AF_LOCAL)
     {
@@ -200,13 +200,6 @@ struct rpc_msg *msg;
   gettimeofday(&cd->last_recv_time, NULL);
 
   FD_CLR(newxprt->xp_fd, &svc_fdset);
-
-  if(pthread_cond_init(&condvar_xprt[newxprt->xp_fd], NULL) != 0)
-    return FALSE;
-
-  /* Init the mutex */
-  memset(&mutex_cond_xprt[newxprt->xp_fd], 0, sizeof(pthread_mutex_t));
-
   etat_xprt[newxprt->xp_fd] = 0;
 
   if((rc =

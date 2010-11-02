@@ -179,6 +179,67 @@ void nfs_rpc_dispatch_dummy(struct svc_req *ptr_req, SVCXPRT * ptr_svc)
   return;
 }                               /* nfs_rpc_dispatch_dummy */
 
+
+static int32_t
+raii_TransportStateInit()
+{
+    /* XXX I think I would prefer an array of state structures, to the current
+     * parallel arrays.  The immediate problem is correct initialization, improve clarity
+     * by initializing objects when they are allocated.  We MUST use a pthreads initializer or
+     * pthreads init routine to init pthreads.
+     */
+    int32_t ix, code = 0;
+    int n_fds = nfs_param.core_param.nb_max_fd;
+
+    /* Allocate resources that are based on the maximum number of open file descriptors */
+    Xports = (SVCXPRT **) Mem_Alloc_Label(n_fds * sizeof(SVCXPRT *), "Xports array");
+    if (!Xports) {
+	code = ENOMEM;
+	goto out;
+    }
+
+    mutex_cond_xprt = (pthread_mutex_t *) Mem_Alloc_Label(n_fds * sizeof(pthread_mutex_t ),
+							  "mutex_cond_xprt array");
+    if (!mutex_cond_xprt) {
+	code = ENOMEM;
+	goto out;
+    }
+    
+    condvar_xprt = (pthread_cond_t *) Mem_Alloc_Label(n_fds * sizeof(pthread_cond_t ),
+						      "condvar_xprt array");
+    if (!condvar_xprt) {
+	code = ENOMEM;
+	goto out;
+    }
+
+    etat_xprt = (int *) Mem_Alloc_Label(n_fds * sizeof(int), "etat_xprt array");
+    if (!etat_xprt) {
+	code = ENOMEM;
+	goto out;
+    }
+
+    /* XXX initialize with valid "new xprt" state--alternatively, we could
+     * set a never valid state. */
+    memset(etat_xprt, 0, (n_fds * sizeof(int)));
+
+    for (ix = 0; ix < n_fds; ++ix) {
+
+	/* default pthread mutex attrs */
+	code = pthread_mutex_init(&(mutex_cond_xprt[ix]), NULL);
+	if (code != 0)
+	    goto out;
+
+	/* default pthread cond attrs */
+	code = pthread_cond_init(&(condvar_xprt[ix]), NULL);
+	if (code != 0)
+	    goto out;
+    } /* each n_fds */
+
+out:
+    return (code);
+
+} /* raii_TransportStateInit */
+
 #ifdef _USE_TIRPC
 extern bool_t Rendezvous_request(SVCXPRT *, struct rpc_msg *);
 #endif
@@ -236,13 +297,13 @@ int nfs_Init_svc()
   gss_cred_id_t test_gss_cred = NULL;
   gss_name_t imported_name = NULL;
 #endif
-  int num_sock = nfs_param.core_param.nb_max_fd;
 
-  /* Allocate resources that are based on the maximum number of open file descriptors */
-   Xports = (SVCXPRT **) Mem_Alloc_Label(num_sock * sizeof(SVCXPRT *), "Xports array");
-  mutex_cond_xprt = (pthread_mutex_t *) Mem_Alloc_Label(num_sock * sizeof(pthread_mutex_t ), "mutex_cond_xprt array");
-  condvar_xprt = (pthread_cond_t *) Mem_Alloc_Label(num_sock * sizeof(pthread_cond_t ), "condvar_xprt array");
-  etat_xprt = (int *) Mem_Alloc_Label(num_sock * sizeof(int), "etat_xprt array");
+  /* Common allocation and initialization of transport state */
+  if (raii_TransportStateInit() != 0) {
+      LogCrit(COMPONENT_DISPATCH,
+	      "NFS EXIT: Cannot initialize global xprt state");
+      return -1;
+  }
 
 #ifdef _USE_TIRPC
   LogEvent(COMPONENT_DISPATCH, "NFS INIT: Using TIRPC");
@@ -253,7 +314,6 @@ int nfs_Init_svc()
       return -1;
   }
 #else
-   Xports = (SVCXPRT **) Mem_Alloc_Label(num_sock * sizeof(SVCXPRT *), "Xports array");
    FD_ZERO(&Svc_fdset);
 #endif
 
@@ -1857,8 +1917,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
 #endif                          /* _USE_QUOTA */
           else
             {
-              /* XXX If this is a regular tcp request on an established connection, it will be handled
-               * by a dedicated thread.  However, as above, it may be a callback reply */
+              /* NFS request on an established TCP connection */
               LogFullDebug(COMPONENT_DISPATCH,
                            "A NFS TCP request from an already connected client");
               pnfsreq->tcp_xprt = xprt;
@@ -1881,7 +1940,7 @@ void nfs_rpc_getreq(fd_set * readfds, nfs_parameter_t * pnfs_para)
               stat = SVC_STAT(pnfsreq->xprt);
               if(stat == XPRT_DIED)
                 {
-#ifndef _USE_TIRPC
+#ifndef _USE_TIRPC /* XXX fix */
                   if((pdead_caller = svc_getcaller(pnfsreq->xprt)) != NULL)
                     {
                       snprintf(dead_caller, MAXNAMLEN, "0x%x=%d.%d.%d.%d",
@@ -2200,8 +2259,10 @@ int nfs_Init_request_data(nfs_request_data_t * pdata)
     }
 #endif                          /* _USE_QUOTA */
 
-#ifndef _USE_TIRPC
   pdata->xprt = NULL;
+#ifdef _USE_TIRPC
+  pdata->xprt_copy = svc_vc_create_xprt(32768 /* sendsz */, 32768 /* recvsz*/);
+#else
   pdata->xprt_copy = Svcxprt_copycreate();
 #endif
 

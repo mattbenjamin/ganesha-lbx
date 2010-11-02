@@ -1,5 +1,5 @@
 /*
- * vim:expandtab:shiftwidth=8:tabstop=8:
+ * Vim:expandtab:shiftwidth=8:tabstop=8:
  *
  * Copyright CEA/DAM/DIF  (2008)
  * contributeur : Philippe DENIEL   philippe.deniel@cea.fr
@@ -167,9 +167,9 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
 
       GetFromPool(pnfsreq, &workers_data[worker_index].request_pool,
                   nfs_request_data_t);
- 
-      V(workers_data[worker_index].request_pool_mutex);
 
+      V(workers_data[worker_index].request_pool_mutex);
+ 
       if(pnfsreq == NULL)
         {
           LogCrit(COMPONENT_DISPATCH,
@@ -179,7 +179,6 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
       xprt = Xports[tcp_sock];
       if(xprt == NULL)
         {
-          /* But do we control sock? */
           LogCrit(COMPONENT_DISPATCH,
                   "CRITICAL ERROR: Incoherency found in Xports array, sock=%d",
                   (int)tcp_sock);
@@ -237,50 +236,59 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
              __FILE__, __LINE__);
 
       //TODO FSF: I think this is a redundant message
-      LogFullDebug(COMPONENT_DISPATCH, "Before waiting on select for socket %d", (int)tcp_sock);
+      LogFullDebug(COMPONENT_DISPATCH, "Before waiting on select for socket %d",
+		   (int)tcp_sock);
 
-      LogFullDebug(COMPONENT_DISPATCH, "Before calling SVC_RECV on socket %d", (int)tcp_sock);
+      LogFullDebug(COMPONENT_DISPATCH, "Before calling SVC_RECV on socket %d",
+		   (int)tcp_sock);
 
       /* Will block until the client operates on the socket */
-      pnfsreq->status = SVC_RECV(pnfsreq->xprt, pmsg);
-      LogFullDebug(COMPONENT_DISPATCH, "Status for SVC_RECV on socket %d is %d", (int)tcp_sock,
-                   pnfsreq->status);
+      pnfsreq->status = SVC_RECV(xprt, pmsg);
+      LogFullDebug(COMPONENT_DISPATCH, "Status for SVC_RECV on socket %d is %d",
+		   (int)tcp_sock, pnfsreq->status);
 
       /* If status is ok, the request will be processed by the related
        * worker, otherwise, it should be released by being tagged as invalid*/
       if(!pnfsreq->status)
         {
-          /* RPC over TCP specific: RPC/UDP's xprt know only one state: XPRT_IDLE, because UDP is mostly
-           * a stateless protocol. With RPC/TCP, they can be XPRT_DIED especially when the client closes
-           * the peer's socket. We have to cope with this aspect in the next lines */
+	    /* RPC over TCP specific: RPC/UDP's xprt know only one state:
+	     *  XPRT_IDLE, because UDP is mostly a stateless protocol. 
+	     * With RPC/TCP, they can be XPRT_DIED especially when the client
+	     * closes the peer's socket. We have to cope with this aspect in
+	     * the next lines */
+	    stat = SVC_STAT(xprt);
 
-          stat = SVC_STAT(pnfsreq->xprt);
-
-          if(stat == XPRT_DIED)
+	    if(stat == XPRT_DIED)
             {
 #ifndef _USE_TIRPC
-              if((paddr_caller = svc_getcaller(pnfsreq->xprt)) != NULL)
+		if((paddr_caller = svc_getcaller(xprt)) != NULL)
                 {
-                  snprintf(str_caller, MAXNAMLEN, "0x%x=%d.%d.%d.%d",
-                           ntohl(paddr_caller->sin_addr.s_addr),
-                           (ntohl(paddr_caller->sin_addr.s_addr) & 0xFF000000) >> 24,
-                           (ntohl(paddr_caller->sin_addr.s_addr) & 0x00FF0000) >> 16,
-                           (ntohl(paddr_caller->sin_addr.s_addr) & 0x0000FF00) >> 8,
-                           (ntohl(paddr_caller->sin_addr.s_addr) & 0x000000FF));
+		    snprintf(str_caller, MAXNAMLEN, "0x%x=%d.%d.%d.%d",
+			     ntohl(paddr_caller->sin_addr.s_addr),
+			     (ntohl(paddr_caller->sin_addr.s_addr) & 0xFF000000) >> 24,
+			     (ntohl(paddr_caller->sin_addr.s_addr) & 0x00FF0000) >> 16,
+			     (ntohl(paddr_caller->sin_addr.s_addr) & 0x0000FF00) >> 8,
+			     (ntohl(paddr_caller->sin_addr.s_addr) & 0x000000FF));
                 }
-              else
+		else
 #endif                          /* _USE_TIRPC */
-                strncpy(str_caller, "unresolved", MAXNAMLEN);
+		    strncpy(str_caller, "unresolved", MAXNAMLEN);
 
               LogEvent(COMPONENT_DISPATCH,
                    "TCP SOCKET MANAGER Sock=%d: the client (%s) disappeared... Freezing thread %p",
                    (int)tcp_sock, str_caller, (caddr_t)pthread_self());
 
-              if(Xports[tcp_sock] != NULL)
-                SVC_DESTROY(Xports[tcp_sock]);
-              else
-                LogCrit(COMPONENT_DISPATCH,
-                     "TCP SOCKET MANAGER : /!\\ **** ERROR **** Mismatch between tcp_sock and xprt array");
+	      {
+		  /* XXXX shouldn't we hold the svc_xprts lock? */
+		  SVCXPRT * dxprt = Xports[tcp_sock];
+		  if(dxprt) {
+		      SVC_DESTROY(dxprt); /* hmm. */
+		      Xports[tcp_sock] = NULL;
+		  }
+		  else
+		      LogCrit(COMPONENT_DISPATCH,
+			      "TCP SOCKET MANAGER : /!\\ **** ERROR **** Mismatch between tcp_sock and xprt array");
+	      }
 
               P(workers_data[worker_index].request_pool_mutex);
               ReleaseToPool(pnfsreq, &workers_data[worker_index].request_pool);
@@ -369,15 +377,14 @@ void *rpc_tcp_socket_manager_thread(void *Arg)
                 nfs_rpc_get_args(pnfsreq, &funcdesc);
             }
 
-#ifdef _USE_TIRPC
-	  /* XXX new Svcxprt_copy behavior looks highly suspicious */
-	  assert(pnfsreq->xprt);
-#else
           /* Update a copy of SVCXPRT and pass it to the worker thread to use it. */
           xprt_copy = pnfsreq->xprt_copy;
+#ifdef _USE_TIRPC
+	  svc_vc_copy_xprt(xprt_copy, xprt);
+#else
           Svcxprt_copy(xprt_copy, xprt);
-          pnfsreq->xprt = xprt_copy;
 #endif
+          pnfsreq->xprt = xprt_copy;
           pentry->buffdata.pdata = (caddr_t) pnfsreq;
           pentry->buffdata.len = sizeof(*pnfsreq);
 
