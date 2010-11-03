@@ -44,7 +44,12 @@
 #include <time.h>
 #include <pthread.h>
 
-#ifdef _USE_GSSRPC
+#if defined( _USE_TIRPC )
+#include <rpc/rpc.h>
+#include <rpc/rpc_com.h>
+#include <rpc/svc.h>
+#include <rpc/clnt.h>
+#elif _USE_GSSRPC
 #include <gssrpc/types.h>
 #include <gssrpc/rpc.h>
 #else
@@ -70,6 +75,15 @@
 #define NFS41_NB_SLOTS           3
 #define NFS41_DRC_SIZE          32768
 
+#define NFS41_SLOT_FLAG_NONE      0x0000
+#define NFS41_SLOT_FLAG_ACTIVE    0x0001  /* request unreplied */
+
+typedef struct nfs41_backchan_slot__
+{
+    uint32_t flags;
+    sequenceid4 sequence;
+} nfs41_backchan_slot_t;
+
 typedef struct nfs41_session_slot__
 {
   sequenceid4 sequence;
@@ -77,6 +91,11 @@ typedef struct nfs41_session_slot__
   char cached_result[NFS41_DRC_SIZE];
   unsigned int cache_used;
 } nfs41_session_slot_t;
+
+#define NFS41_BACKCHAN_FLAG_NONE         0x0000
+#define NFS41_BACKCHAN_FLAG_SET          0x0001
+#define NFS41_BACKCHAN_FLAG_CHECKED      0x0002
+#define NFS41_BACKCHAN_FLAG_DOWN         0x0004
 
 typedef struct nfs41_session__
 {
@@ -86,7 +105,20 @@ typedef struct nfs41_session__
   char session_id[NFS4_SESSIONID_SIZE];
   channel_attrs4 fore_channel_attrs;
   channel_attrs4 back_channel_attrs;
+  struct nfs41_session_backchan {
+      uint32_t flags;
+      pthread_mutex_t lock;
+      time_t last_check_time;
+#ifdef _USE_TIRPC
+      CLIENT *clnt; /* XXX there CAN be multiple CLIENTs */
+      nfs41_backchan_slot_t slots[NFS41_NB_SLOTS];
+      slotid4 current_slotid;
+      slotid4 highest_slotid;
+#endif
+  } back_chan[1];
   nfs41_session_slot_t slots[NFS41_NB_SLOTS];
+  struct nfs41_session__ *next_alloc;
 } nfs41_session_t;
+typedef struct nfs41_session_backchan nfs41_session_backchan_t; 
 
 #endif                          /* _NFS41_SESSION_H */

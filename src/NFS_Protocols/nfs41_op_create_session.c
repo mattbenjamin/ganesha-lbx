@@ -109,7 +109,15 @@ int nfs41_op_create_session(struct nfs_argop4 *op,
   res_CREATE_SESSION4.csr_status = NFS4_OK;
   clientid = arg_CREATE_SESSION4.csa_clientid;
 
-  LogDebug(COMPONENT_NFS_V4, "CREATE_SESSION clientid = %llx", (long long unsigned int)clientid);
+  LogDebug(COMPONENT_NFS_V4, "CREATE_SESSION clientid4=%llx flags %s%s%s\n",
+           (long long unsigned int) clientid,
+           (arg_CREATE_SESSION4.csa_flags & CREATE_SESSION4_FLAG_PERSIST) ?
+           " CREATE_SESSION4_FLAG_PERSIST" : "",
+           (arg_CREATE_SESSION4.csa_flags & 
+            CREATE_SESSION4_FLAG_CONN_BACK_CHAN) ?
+           " CREATE_SESSION4_FLAG_CONN_BACK_CHAN" : "",
+           (arg_CREATE_SESSION4.csa_flags & CREATE_SESSION4_FLAG_CONN_RDMA) ?
+           " CREATE_SESSION4_FLAG_CONN_RDMA" : "");
 
   /* Does this id already exists ? */
   if(nfs_client_id_Get_Pointer(clientid, &pnfs_clientid) != CLIENT_ID_SUCCESS)
@@ -166,7 +174,11 @@ int nfs41_op_create_session(struct nfs_argop4 *op,
   memset((char *)pnfs41_session, 0, sizeof(nfs41_session_t));
   pnfs41_session->clientid = clientid;
   pnfs41_session->sequence = 1;
-  pnfs41_session->session_flags = CREATE_SESSION4_FLAG_CONN_BACK_CHAN;
+  /* The client may have sent CREATE_SESSION4_FLAG_CONN_BACK_CHAN, but do
+   * not accept the current connection for backchannel requests.  Per
+   * 5661, the client will use BIND_CONN_TO_SESSION to associate an alternate
+   * connection if it wants to use delegations, etc. */
+  pnfs41_session->session_flags = 0;
   pnfs41_session->fore_channel_attrs = arg_CREATE_SESSION4.csa_fore_chan_attrs;
   pnfs41_session->back_channel_attrs = arg_CREATE_SESSION4.csa_back_chan_attrs;
 

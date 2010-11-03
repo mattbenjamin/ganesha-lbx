@@ -499,6 +499,9 @@ typedef struct nfs_worker_data__
   int is_ready;
   unsigned int gc_in_progress;
   unsigned int current_xid;
+#ifdef _USE_TIRPC
+  SVCXPRT *current_xprt;
+#endif
   fsal_op_context_t thread_fsal_context;
 } nfs_worker_data_t;
 
