@@ -109,12 +109,10 @@ typedef struct nfs41_session__
       uint32_t flags;
       pthread_mutex_t lock;
       time_t last_check_time;
-#ifdef _USE_TIRPC
       CLIENT *clnt; /* XXX there CAN be multiple CLIENTs */
       nfs41_backchan_slot_t slots[NFS41_NB_SLOTS];
       slotid4 current_slotid;
       slotid4 highest_slotid;
-#endif
   } back_chan[1];
   nfs41_session_slot_t slots[NFS41_NB_SLOTS];
   struct nfs41_session__ *next_alloc;
