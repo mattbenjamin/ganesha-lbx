@@ -19,7 +19,7 @@ BuildRequires:  mysql-libs >= 5.0
 %if %{?_with_gpfs:1}%{!?_with_gpfs:0}
 # we have to be really specific on kernel version
 # because we are packaging a module
-BuildRequires: kernel == 2.6.18-194.el5
+BuildRequires: kernel-devel
 %endif
 BuildRequires: flex
 BuildRequires: bison
@@ -464,7 +464,7 @@ chkconfig --del nfs-ganesha-gpfs
 
 %post gpfs
 chkconfig --add nfs-ganesha-gpfs
-/sbin/depmod
+/sbin/depmod -a
 %endif
 
 %if %{?_with_lustre:1}%{!?_with_lustre:0}

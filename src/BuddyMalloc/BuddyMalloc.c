@@ -2793,7 +2793,7 @@ void DisplayMemoryMap(FILE *output)
       else
         {
           diff =
-              p_curr_block->Header.p_next_allocated - p_curr_block -
+              (char *) p_curr_block->Header.p_next_allocated - (char *) p_curr_block -
               (1 << p_curr_block->Header.StdInfo.k_size);
 
           /* which size ? */

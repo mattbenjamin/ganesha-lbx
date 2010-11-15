@@ -75,6 +75,7 @@
 #include "nfs_core.h"
 
 int getpeereid(int s, uid_t * euid, gid_t * egid);
+int fridgethr_get( pthread_t * pthrid, void *(*thrfunc)(void*), void * thrarg ) ;
 
 pthread_mutex_t *mutex_cond_xprt;
 pthread_cond_t *condvar_xprt;
